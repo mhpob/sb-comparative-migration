@@ -1,7 +1,7 @@
 library(readxl); library(data.table)
 
 # Import tagging data ----
-de_tagging_data <- read_excel('embargo/raw/de tag data.xlsx',
+de_tagging_data <- read_excel('embargo/raw/dnrec/de tag data.xlsx',
                               range = cell_cols('a:k'))
 setDT(de_tagging_data)
 setnames(de_tagging_data, function(.) tolower(gsub('[ #]', '', .)))
@@ -41,7 +41,7 @@ setkey(de_tagging_data, acoustictag, date, enddate)
 # Detection files have been split into a suite of XLSX files in sex-by-length groups.
 
 # Find the location of all the files
-de_dets <- list.files('embargo/raw/de detection data',
+de_dets <- list.files('embargo/raw/dnrec/de detection data',
                       full.names = T)
 
 # Read all of the files into parts of a list
