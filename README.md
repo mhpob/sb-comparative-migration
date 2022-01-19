@@ -7,5 +7,5 @@
 <!-- badges: end -->
 
 A comparative study of striped bass shelf migrations by population
-source with the intent to investigate patterns of shelf incidence as
+source with the intent (and intent is EVERYTHING) to investigate patterns of shelf incidence as
 they occur in coastal arrays from 2016 - 2019.
