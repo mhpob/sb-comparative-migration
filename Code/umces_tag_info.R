@@ -7,11 +7,11 @@ asmfc <- fread('embargo/raw/umces/taggingdata.csv',
 asmfc[, ':='(tagdate = as.Date(tagdate, '%m/%d/%Y'),
              tl = lengthtlmm,
              wgt = weightkg,
-             extag = floytagid,
+             exttag = floytagid,
              age = agescale)]
 asmfc[, location := fifelse(tagdate < '2014-05-01', 'Potomac, Newburg',
                             'Potomac, Pt Lookout')]
-asmfc <- asmfc[, .(tagdate, transmitter, extag, tl, wgt, sex,
+asmfc <- asmfc[, .(tagdate, transmitter, exttag, tl, wgt, sex,
                    age, location)]
 
 # A69-1601-25465 reused
@@ -24,11 +24,11 @@ boem[, ':='(tagdate = as.Date(as.character(tagdate), '%Y%m%d'),
             tl = lengthtlmm,
             wgt = weightkg,
             transmitter = tagid,
-            extag = exttagid)]
+            exttag = exttagid)]
 boem[grepl('\\d', location), ':='(location = 'MA Coast',
                                   lat = as.numeric(gsub(',.*', '', location)),
                                   lon = as.numeric(gsub('.*\\s', '', location)))]
-boem <- boem[, .(tagdate, transmitter, extag, tl, wgt, sex, location, lat, lon)]
+boem <- boem[, .(tagdate, transmitter, exttag, tl, wgt, sex, location, lat, lon)]
 
 
 # Hudson 2016 - 2019 (HRF)

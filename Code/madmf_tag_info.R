@@ -15,6 +15,7 @@ tag_data[, ':='(date = as.Date(date),
                 notes = fifelse(!is.na(`12`),
                                 gsub(', NA', '', paste(notes, `12`, `13`, sep = ', ')),
                                 notes),
+                actag = NULL,
                 `12` = NULL,
                 `13` = NULL)]
 
