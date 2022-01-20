@@ -78,6 +78,6 @@ de_dets[, ':='(endtime = NULL,
                date = NULL)]
 
 # Write CSV
-fwrite(de_dets, 'EMBARGO/derived/de_fish.csv', dateTimeAs = 'write.csv')
+fwrite(de_dets, 'EMBARGO/derived/de_tag_info_detections.csv', dateTimeAs = 'write.csv')
 
 
