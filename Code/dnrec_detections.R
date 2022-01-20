@@ -1,39 +1,7 @@
 library(readxl); library(data.table)
 
 # Import tagging data ----
-de_tagging_data <- read_excel('embargo/raw/dnrec/de tag data.xlsx',
-                              range = cell_cols('a:k'))
-setDT(de_tagging_data)
-setnames(de_tagging_data, function(.) tolower(gsub('[ #]', '', .)))
-
-# At least two tags were re-used, so have to do some gymnastics to join with detections
-# Going to use data.table::foverlaps to make sure that fish detections are matched
-#   to the period of time that the tag was in a particular fish
-# 53482, 53985 are the repeated transmitters
-
-# Create run-length IDs for each transmitter. Transmitters only deployed once will
-#   have only one run-length (a value of 1), those deployed 2 times will have two
-#   IDs (1 and 2)
-de_tagging_data[, enddate := rleid(date), by = 'acoustictag']
-
-# If there are two groups, set the first deployment's end date to the deployment
-#   date of the second time period. Else, set it to Jan 1, 2020.
-de_tagging_data[, enddate := fifelse(max(enddate) > 1 & enddate == 1, max(date),
-                                as.POSIXct('2020-01-01 00:00:00', tz = 'UTC')),
-                by = 'acoustictag']
-
-# Convert date-times to POSIX
-de_tagging_data[, enddate := .POSIXct(enddate, tz = 'UTC')]
-
-# Clean up age data
-de_tagging_data[, age := as.integer(fifelse(age == '-', NA, age))]
-
-# Convert the acoustic tag to character to match the class in the next data set
-de_tagging_data[, acoustictag := as.character(acoustictag)]
-
-# Tell data.table which columns are start and end dates (and that they're grouped
-#   by acoustictag).
-setkey(de_tagging_data, acoustictag, date, enddate)
+tag_data <- fread('EMBARGO/derived/dnrec_tag_info.csv')
 
 
 
@@ -56,26 +24,31 @@ de_dets <- rbindlist(de_dets)
 # Repair names
 setnames(de_dets, function(.) tolower(gsub('and|UTC|[) ()]', '', .)))
 
-# data.table::foverlaps needs a start and end time. Duplicate the time of detection
-#   to make a dummy end time
-de_dets[, endtime := datetime]
 
-# Pull out transmitter "acoustic tag" flag
-de_dets[, acoustictag := gsub('.*-', '', transmitter)]
+# 53482 was re-used, so have to do some gymnastics to join with detections
+# Bind detection data before the second time 53482 was deployed to the associated
+#   tag data
+first_half <- de_dets[datetime < as.POSIXct('2017-04-28 00:00:00', tz = 'UTC')]
+first_53482 <- tag_data[!(grepl('53482', transmitter) & date == '2017-04-28')]
+
+first_half <- first_half[first_53482, on = 'transmitter', nomatch = 0]
+
+# Bind detection data after the second time 53482 was deployed to the associated
+#   tag data
+second_half <- de_dets[datetime >= as.POSIXct('2017-04-28 00:00:00', tz = 'UTC')]
+second_53482 <- tag_data[!(grepl('53482', transmitter) & date < '2017-04-28')]
+
+second_half <- second_half[second_53482, on = 'transmitter', nomatch = 0]
 
 
+# Put them together
+de_dets <- rbind(first_half, second_half)
 
-# Conduct overlap join ----
-de_dets <- foverlaps(de_dets, de_tagging_data,
-                     by.x = c('acoustictag', 'datetime', 'endtime'))
 
 
 # Export data ----
-# Drop unneeded columns and rename "date" to "tagdate"
-de_dets[, ':='(endtime = NULL,
-               acoustictag = NULL,
-               tagdate = date,
-               date = NULL)]
+# Rename "date" to "tagdate"
+setnames(de_dets, 'date', 'tagdate')
 
 # Write CSV
 fwrite(de_dets, 'EMBARGO/derived/de_tag_info_detections.csv', dateTimeAs = 'write.csv')
