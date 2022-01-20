@@ -18,6 +18,7 @@ asmfc <- asmfc[, .(tagdate, transmitter, extag, tl, wgt, sex,
 
 # Potomac / MA Coast 2017 - (BOEM)
 boem <- fread('embargo/raw/umces/wea tagging data.csv',
+              na.strings = '',
               col.names = function(.) tolower(gsub('\n|[) (,/]', '', .)))
 boem[, ':='(tagdate = as.Date(as.character(tagdate), '%Y%m%d'),
             tl = lengthtlmm,
