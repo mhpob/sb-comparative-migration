@@ -1,0 +1,116 @@
+---
+title: "Initial cross-system data comparison"
+date: '2022-01-20'
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+
+```{r}
+library(ggplot2); library(data.table)
+
+all_info <- fread('embargo/derived/combined_tag_info.csv',
+                  na.strings = '')
+all_info[, yr := as.factor(year(tagdate))]
+
+all_info
+```
+
+## Systems
+
+```{r}
+xtabs(~  system, addNA = T, data = all_info)
+```
+
+## Year tagged
+
+```{r}
+# Cross-tabulation
+addmargins(xtabs(~ yr + system, addNA = T, data = all_info))
+
+# Dirty chi-squared test
+summary(xtabs(~ yr + system, addNA = T, data = all_info))
+```
+
+```{r}
+ggplot(data = all_info) +
+  geom_bar(aes(x = yr, fill = system))
+```
+## Age
+
+Hudson River and a subset of Potomac origin fish have not yet been, but are planning to be, aged.
+
+```{r}
+# Cross-tabulation
+addmargins(xtabs(~ age + system, addNA = T, data = all_info))
+
+# Dirty chi-squared test
+summary(xtabs(~ age + system, addNA = T, data = all_info))
+```
+
+```{r}
+ggplot(data = all_info) +
+  geom_bar(aes(x = age, fill = yr)) +
+  scale_fill_viridis_d() +
+  facet_wrap(~ system) +
+  labs(title = 'Age by year and system tagged')
+
+ggplot(data = all_info) +
+  geom_bar(aes(x = age, fill = sex)) +
+  facet_wrap(~ system) +
+  labs(title = 'Age by system tagged and sex')
+```
+
+
+## Sexes
+
+Fish collected off the Massachusetts coast and 21% of Potomac fish were not sexed.
+
+```{r}
+# Cross-tabulation
+addmargins(xtabs(~ sex + system, addNA = T, data = all_info))
+
+# Dirty chi-squared test
+summary(xtabs(~ sex + system, addNA = T, data = all_info))
+```
+
+```{r}
+ggplot(data = all_info) +
+  geom_bar(aes(x = yr, fill = sex)) +
+  facet_wrap(~ system)
+```
+
+## Lengths
+
+All fish collected have total lengths. Only Hudson fish have fork lengths.
+
+```{r}
+ggplot(data = all_info) +
+  geom_histogram(aes(x = tl, fill = yr), binwidth = 50) +
+  scale_fill_viridis_d() +
+  facet_wrap(~ system, scales = 'free_y') +
+  labs(title = 'Total length by year and tagged')
+
+ggplot(data = all_info) +
+  geom_histogram(aes(x = tl, fill = yr), binwidth = 50) +
+  scale_fill_viridis_d() +
+  facet_grid(sex ~ system, scales = 'free_y') +
+  labs(title = 'Total length by sex and year and system tagged')
+```
+
+
+## Weights
+
+Only Potomac and Hudson fish have recorded weights.
+
+```{r}
+all_info[!is.na(wgt), .N, by = system]
+
+ggplot(data = all_info) +
+  geom_histogram(aes(x = wgt, fill = yr), binwidth = 1000) +
+  scale_fill_viridis_d() +
+  facet_wrap(~ system, scales = 'free_y')
+```
+
