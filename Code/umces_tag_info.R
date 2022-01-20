@@ -9,8 +9,9 @@ asmfc[, ':='(tagdate = as.Date(tagdate, '%m/%d/%Y'),
              wgt = weightkg,
              exttag = floytagid,
              age = agescale)]
-asmfc[, location := fifelse(tagdate < '2014-05-01', 'Potomac, Newburg',
-                            'Potomac, Pt Lookout')]
+asmfc[, ':='(location = fifelse(tagdate < '2014-05-01', 'Potomac, Newburg',
+                            'Potomac, Pt Lookout'),
+             wgt = wgt * 1000)]
 asmfc <- asmfc[, .(tagdate, transmitter, exttag, tl, wgt, sex,
                    age, location)]
 
@@ -25,6 +26,7 @@ boem[, ':='(tagdate = as.Date(as.character(tagdate), '%Y%m%d'),
             wgt = weightkg,
             transmitter = tagid,
             exttag = exttagid)]
+boem[, wgt := wgt * 1000]
 boem[grepl('\\d', location), ':='(location = 'MA Coast',
                                   lat = as.numeric(gsub(',.*', '', location)),
                                   lon = as.numeric(gsub('.*\\s', '', location)))]
