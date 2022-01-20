@@ -42,4 +42,6 @@ hrf <- hrf[, .(tagdate, transmitter, location, tl, wgt, sex)]
 
 
 tag_info <- rbind(asmfc, hrf, boem, fill = T)
-View(tag_info)
+
+fwrite(tag_info, 'embargo/derived/umces_tag_info.csv',
+       dateTimeAs = 'write.csv')
