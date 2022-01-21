@@ -85,48 +85,6 @@ ggplot(data = all_info) +
 ```
 
 
-
-### Cursory system-sex-age ANOVA
-- Analysis only includes DE- and Potomac-tagged fish (no sexes or lengths in MA and Hudson fish)
-- Results shouldn't be taken at face value -- this is an unbalanced ANOVA being analyzed in a balances ANOVA framework and so should be better-analyzed in the future.
-
-```{r}
-plot(
-  TukeyHSD(aov(age ~ system * sex * yr, data = all_info[sex != 'U']),
-           'sex'), 
-  las = 2
-)
-```
-
-- Overall, tagged males were significantly younger than females.
-
-```{r}
-par(mar = c(4, 9.5, 2, 2))
-plot(
-  TukeyHSD(aov(age ~ system * sex * yr, data = all_info[sex != 'U']),
-           'system:sex'), 
-  las = 2
-)
-```
-
-- DE- and Potomac-tagged males were significantly younger than their female counterparts
-
-- Potomac-tagged females were significantly younger than DE-tagged; Potomac- and DE-tagged males were barely significantly different in age at α = 0.05
-
-- Potomac-tagged males were significantly younger than DE-tagged females; there was no significant difference between the age of DE-tagged males and Potomac-tagged females at α = 0.05
-
-```{r}
-par(mar = c(4, 5, 2, 2))
-plot(
-  TukeyHSD(aov(age ~ system * sex * yr, data = all_info[sex != 'U']),
-           'yr'), 
-  las = 2
-)
-```
-
-- 2014-tagged fish were significantly older than 2018-tagged fish, significantly younger than 2019-tagged fish, and no significant difference for other years.
-
-
 ## Sexes
 
 Fish collected off the Massachusetts coast and 21% of Potomac fish were not sexed. "*NA*" means that sex was not recorded, while "*U*" means that the sex was not able to be determined.
