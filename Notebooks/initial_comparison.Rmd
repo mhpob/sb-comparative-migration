@@ -1,16 +1,27 @@
 ---
 title: "Initial cross-system data comparison"
-date: '2022-01-20'
+date: '2022-01-21'
 output:
   html_notebook: default
-  # pdf_document: default
+  pdf_document: default
 ---
 
+## General summary
+
+- 849 fish were tagged across the four groups (coastal Massachusetts and the Hudson, Delaware, and Potomac Rivers) from 2014-2019
+- 2016 was the only year where fish were concurrently tagged by each group
+- Types of data collected were tag date, transmitter ID, external ID, in-house ID, total length, fork length, wet weight, scale age, sex, general area of tagging
+- All tagging groups collected the date of tagging, age, and total length
+  - Hudson fish are in the process of being aged
+  - 15% Potomac fish have scales collected for ageing, but these have not yet been processed
+- Hudson, Delaware, and Potomac River systems have sex data; coastal Massachusetts does not
+- Hudson and Potomac have weights; Delaware and Massachusetts do not
 
 
-```{r}
+```{r message=FALSE}
 library(ggplot2); library(data.table)
-
+```
+```{r}
 all_info <- fread('embargo/derived/combined_tag_info.csv',
                   na.strings = '')
 all_info[, yr := as.factor(year(tagdate))]
@@ -22,7 +33,7 @@ all_info
 ## Systems
 
 ```{r}
-xtabs(~  system, addNA = T, data = all_info)
+addmargins(xtabs(~  system, addNA = T, data = all_info))
 ```
 
 ## Year tagged
@@ -32,17 +43,14 @@ xtabs(~  system, addNA = T, data = all_info)
 - 2016 is the only year that had fish tagged in all systems
 
 ```{r}
-# Cross-tabulation
 addmargins(xtabs(~ yr + system, addNA = T, data = all_info))
-
-# Dirty chi-squared test
-summary(xtabs(~ yr + system, addNA = T, data = all_info))
 ```
 
 ```{r}
 ggplot(data = all_info) +
   geom_bar(aes(x = yr, fill = system))
 ```
+
 ## Age
 
 - Hudson River and a subset of Potomac-tagged fish have not yet been, but are planning to be, aged. There will likely wind up being no Hudson River *NA* and 1 Potomac River *NA*.
@@ -50,9 +58,6 @@ ggplot(data = all_info) +
 ```{r}
 # Cross-tabulation
 addmargins(xtabs(~ age + system, addNA = T, data = all_info))
-
-# Dirty chi-squared test
-summary(xtabs(~ age + system, addNA = T, data = all_info))
 
 # Range of ages
 all_info[, .(min = min(age, na.rm = T),
@@ -69,7 +74,7 @@ TukeyHSD(aov(age ~ system, data = all_info))
 
 
 ```{r}
-ggplot(data = all_info) +
+ggplot(data = all_info[!is.na(age)]) +
   geom_bar(aes(x = age, fill = yr)) +
   scale_fill_viridis_d() +
   facet_wrap(~ system) +
@@ -78,7 +83,7 @@ ggplot(data = all_info) +
 
 
 ```{r}
-ggplot(data = all_info) +
+ggplot(data = all_info[!is.na(age)]) +
   geom_bar(aes(x = age, fill = sex)) +
   facet_wrap(~ system) +
   labs(title = 'Age by system tagged and sex')
@@ -90,11 +95,7 @@ ggplot(data = all_info) +
 Fish collected off the Massachusetts coast and 21% of Potomac fish were not sexed. "*NA*" means that sex was not recorded, while "*U*" means that the sex was not able to be determined.
 
 ```{r}
-# Cross-tabulation
 addmargins(xtabs(~ sex + system, addNA = T, data = all_info))
-
-# Dirty chi-squared test
-summary(xtabs(~ sex + system, addNA = T, data = all_info))
 ```
 
 ```{r}
@@ -111,16 +112,17 @@ All fish collected have total lengths, while only Hudson fish have fork lengths.
 ggplot(data = all_info) +
   geom_histogram(aes(x = tl, fill = yr), binwidth = 50) +
   scale_fill_viridis_d() +
-  facet_wrap(~ system, scales = 'free_y') +
+  facet_wrap(~ system) +
   labs(title = 'Total length by year and tagged')
 ```
-Massachusetts-tagged fish are _much_ smaller than other areas.
+
+- Potomac and MA coast fish skew smaller, Hudson skews larger, and DE is bimodal (related in part to sex, see below)
 
 ```{r}
-ggplot(data = all_info) +
+ggplot(data = all_info[!is.na(sex) & sex != 'U']) +
   geom_histogram(aes(x = tl, fill = yr), binwidth = 50) +
   scale_fill_viridis_d() +
-  facet_grid(sex ~ system, scales = 'free_y') +
+  facet_grid(sex ~ system) +
   labs(title = 'Total length by sex and year and system tagged')
 ```
 
@@ -132,9 +134,9 @@ Only Potomac and Hudson fish have recorded weights, with Potomac fish skewing mu
 ```{r}
 all_info[!is.na(wgt), .N, by = system]
 
-ggplot(data = all_info) +
+ggplot(data = all_info[!is.na(wgt)]) +
   geom_histogram(aes(x = wgt, fill = yr), binwidth = 1000) +
   scale_fill_viridis_d() +
-  facet_wrap(~ system, scales = 'free_y')
+  facet_wrap(~ system)
 ```
 
