@@ -10,8 +10,8 @@ setnames(dnrec,
          c('date', 'totallength', 'tagginglocation', 'tbartag', 'fish'),
          c('tagdate', 'tl', 'taglocation', 'exttag', 'fishid'))
 setnames(madmf,
-         c('date', 'tlmm', 'capturelocation'), 
-         c('tagdate', 'tl', 'taglocation'))
+         c('date', 'capturelocation'), 
+         c('tagdate', 'taglocation'))
 setnames(umces, 'location', 'taglocation')
 
 

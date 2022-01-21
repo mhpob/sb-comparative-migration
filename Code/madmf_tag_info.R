@@ -8,14 +8,22 @@ tag_data <- read_xlsx(
 setDT(tag_data)
 setnames(tag_data, function(.) tolower(gsub('[#\\.)( ]', '', .)))
 
-names(tag_data)
+
 
 tag_data[, ':='(date = as.Date(date),
                 transmitter = paste('A69-9001', actag, sep = '-'),
-                notes = fifelse(!is.na(`12`),
-                                gsub(', NA', '', paste(notes, `12`, `13`, sep = ', ')),
-                                notes),
                 actag = NULL,
+                
+                # tlmm column is mislabeled -- units are cm, so convert to mm
+                tl = tlmm * 10,
+                tlmm = NULL,
+                
+                # combine all notes columns into one.
+                notes = fifelse(
+                  !is.na(`12`),
+                  gsub(', NA', '', paste(notes, `12`, `13`, sep = ', ')),
+                  notes
+                ),
                 `12` = NULL,
                 `13` = NULL)]
 
