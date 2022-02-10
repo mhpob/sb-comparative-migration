@@ -67,7 +67,7 @@ not_missing <- unique(not_missing, by = 'stationname')[, .(stationname, latitude
 
 de_dets <- not_missing[de_dets, on = 'stationname']
 de_dets[, ':='(latitude = fifelse(is.na(latitude), i.latitude, latitude),
-         longitude = fifelse(is.na(longitude), i.latitude, latitude),
+         longitude = fifelse(is.na(longitude), i.longitude, longitude),
          i.latitude = NULL,
          i.longitude = NULL)]
 
@@ -126,7 +126,7 @@ station_key <- rbind(
 
 de_dets <- station_key[de_dets, on = 'stationname']
 de_dets[, ':='(latitude = fifelse(is.na(latitude), i.latitude, latitude),
-               longitude = fifelse(is.na(longitude), i.latitude, latitude),
+               longitude = fifelse(is.na(longitude), i.longitude, longitude),
                i.latitude = NULL,
                i.longitude = NULL)]
 
