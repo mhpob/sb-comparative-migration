@@ -1,0 +1,178 @@
+---
+title: "R Notebook"
+date: '2022-02-15'
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE
+)
+```
+
+## Suggestions
+
+1.  Look at Kneebone plots overlaid for Delaware (DE), Hudson (HR), and Potomac (PR) fish for period 2016-2019 (comprising fish tagged between 2014-2019). Could look at sex patterns here as well.
+2.  Pick a couple landmark arrival/departure regions such as Ben's MA array (summering area), and HR, DE, PR receivers (spawning area) and compare arrival and departures more quantitatively (logistic regression?). Look at sex patterns?
+
+The following plots/notes are only using DE, HR, and PR-tagged fish as natal estuaries of MA-tagged fish are not assigned -- or if they are, I think that's a Ben-specific project at this point.
+
+```{r message=FALSE}
+library(lubridate); library(ggplot2); library(data.table)
+
+
+umces <- fread('embargo/derived/umces_tag_info_detections.csv')
+umces <- umces[location != 'MA Coast']
+umces[, group := fifelse(grepl('1303', transmitter), 'HR', 'PR')]
+
+dnrec <- fread('embargo/derived/de_tag_info_detections.csv')
+dnrec[, group := 'DE']
+
+dets <- rbind(umces, dnrec, fill = T)
+
+dets <- dets[datetime %between% c('2016-01-01', '2020-01-01')]
+
+
+dets[, ':='(hr = floor_date(datetime, 'hour'),
+            day = floor_date(datetime, 'day'),
+            year = year(datetime),
+            yday = yday(datetime))]
+
+station_key <- fread('data/station_key.csv')
+dets <- station_key[, .(array, stationname)][dets, on = 'stationname']
+dets <- dets[array != 'FALSE_DET']
+
+rm(umces, dnrec)
+```
+
+## 1. Kneebone plots
+
+### Overall patterns
+
+```{r}
+plot_data <- dets[, .(md_pos = median(latitude)), by = c('day', 'transmitter', 'group', 'sex')]
+
+ggplot(data = plot_data) +
+  geom_point(aes(x = day, y = md_pos), alpha = 0.5) +
+  facet_wrap(~ group, ncol = 1) +
+  labs(y = 'Median latitude per day')
+```
+
+Only worthwhile comparing PR and HR fish at this point since there's information from coastal arrays. Can see size effects -- all HR fish are large ocean migrants, whereas PR and DE fish contain (likely smaller) residents, producing that bar through time around their natal river. Bar thins with time for PR fish due to tag loss and recruitment into the migratory contingent.
+
+```{r}
+de_plot_data <- dets[group == 'DE', .(md_pos = median(latitude)),
+                     by = c('day', 'transmitter', 'group', 'sex')]
+
+ggplot(data = de_plot_data) +
+  geom_point(aes(x = day, y = md_pos), alpha = 0.5) +
+  labs(y = 'Median latitude per day', subtitle = 'DE fish only')
+```
+
+If we look at the DE fish and zoom into the DE River, we can see an analogous cycle.
+
+### By sex
+
+```{r}
+ggplot(data = plot_data) +
+  geom_point(aes(x = day, y = md_pos), alpha = 0.5) +
+  facet_grid(sex ~ group) +
+  labs(y = 'Median latitude per day', subtitle = 'By sex')
+```
+
+Nothing obvious jumps out to me on the sex-based difference front. There are more resident PR males, but if I remember correctly this was due to a bias in our sampling. We didn't record sexes in our initial tagging push in 2014, resulting in that top-right box. Fish labeled as `U` were those that we just had no clue what sex they were.
+
+```{r}
+ggplot(data = de_plot_data) +
+  geom_point(aes(x = day, y = md_pos), alpha = 0.5) +
+  facet_wrap(~ sex, ncol = 1) +
+  labs(y = 'Median latitude per day', subtitle = 'By sex, DE fish only')
+```
+
+## 2. Summering vs spawning phenology
+
+```{r}
+pheno <- dets[, .(min_date = min(yday),
+                  max_date = max(yday)),
+              by = c('group', 'array', 'year', 'transmitter')]
+
+pheno <- pheno[, .(min_min = min(min_date),
+                   med_min = median(min_date),
+                   med_max = median(max_date),
+                   max_max = max(max_date)),
+               by = c('group', 'array', 'year')]
+
+pheno <- pheno[group == 'PR' & array == 'Potomac' |
+                 group == 'HR' & array == 'Hudson'|
+                 group =='DE' & array == 'Delaware' |
+                 array == 'MA Coast']
+
+pheno[, array := factor(array,
+                        levels = c('Potomac', 'Delaware', 'Hudson', 'MA Coast'),
+                        ordered = T)]
+
+ggplot(data = pheno) +
+  geom_linerange(aes(xmin = min_min, xmax = max_max, y = group, color = array),
+                 position = position_dodge(0.75), size = 1) +
+  geom_point(aes(x = med_min, y = group, color = array),
+             position = position_dodge(0.75), size = 5) +
+  geom_point(aes(x = med_max, y = group, color = array), shape = 'triangle',
+             position = position_dodge(0.75), size = 5) +
+  scale_x_continuous(limits = c(0, 366), expand = c(0, 0)) +
+  facet_wrap(~ year, ncol = 1) +
+  labs(x = 'Day of year') +
+  theme_minimal()
+```
+
+Idea of this plot is to compare the timing of arrival and departure from natal estuaries and summering grounds (at this time considered to be coastal Massachusetts; yellow). Extent of the lines are the range of dates in which a group was detected within an array. Circles are the median dates of arrival in the array (technically the group median of the earliest day for each fish) and triangles are the median dates of departure (group median of the latest day for each fish).
+
+-   I don't yet have coastal detections for DE fish, so any patterns there are likely just artifacts.
+-   PR fish consistently depart their natal estuary earlier than HR fish, though they mostly arrive at the same time (aside from 2017).
+-   Duration of residency offshore of Massachusetts is a little bit longer in HR when compared to PR fish.
+-   Patterns are likely jumbled here due to size-based differences.
+
+```{r}
+pheno_mig <- dets[tl >= 800,
+                  .(min_date = min(yday),
+                    max_date = max(yday)),
+                  by = c('group', 'array', 'year', 'transmitter')]
+
+pheno_mig <- pheno_mig[, 
+                       .(min_min = min(min_date),
+                         med_min = median(min_date),
+                         med_max = median(max_date),
+                         max_max = max(max_date)),
+                       by = c('group', 'array', 'year')]
+
+pheno_mig <- pheno_mig[group == 'PR' & array == 'Potomac' |
+                         group == 'HR' & array == 'Hudson'|
+                         group =='DE' & array == 'Delaware' |
+                         array == 'MA Coast']
+
+pheno_mig[, array := factor(array,
+                            levels = c('Potomac', 'Delaware', 'Hudson', 'MA Coast'),
+                            ordered = T)]
+
+ggplot(data = pheno_mig) +
+  geom_linerange(aes(xmin = min_min, xmax = max_max, y = group, 
+                     color = array),
+                 position = position_dodge(0.75), size = 1) +
+  geom_point(aes(x = med_min, y = group, color = array),
+             position = position_dodge(0.75), size = 5) +
+  geom_point(aes(x = med_max, y = group, color = array), shape = 'triangle',
+             position = position_dodge(0.75), size = 5) +
+  facet_wrap(~ year, ncol = 1) +
+  labs(x = 'Day of year', subtitle = 'Fish >800mm at tagging') +
+  theme_minimal()
+```
+
+Looking at fish that are \>800mm at tagging (migratory if painting with broad strokes), we see that DE fish drop -- they were all smaller fish at tagging -- and we get more-consistent patterns at the natal estuary level.
+
+-   PR fish arrive in and leave their natal estuary earlier than HR fish.
+-   The median dates of departure from natal estuaries is remarkably consistent, esp. for HR fish.
+-   Aside from 2018, HR residence in coastal MA was pretty consistent.
+-   PR fish left MA waters at nearly the same time each year. Aside from 2017, HR fish departed sometime after.
+-   By 2019, transmitter life and fishing seems to have taken its toll, shrinking down the reported natal river estuary. Despite this, the pattern of residency offshore of MA remained the same. This implies to me that group, rather than individual, tendencies are driving the phenology of MA residence (the loss of transmitters doesn't affect things much), whereas individual effects might be driving natal estuary residency (reduction in number of available transmitters results in a reduction in variance of residency times).
+
