@@ -1,5 +1,6 @@
 library(ggplot2); library(data.table)
 
+all_info <- fread('embargo/derived/combined_tag_info.csv')
 
 
 summary(xtabs(~ yr + age, data = de_tagging_data[yr != 2017]))
