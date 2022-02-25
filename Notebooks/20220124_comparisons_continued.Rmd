@@ -29,20 +29,21 @@ umces[, group := fifelse(grepl('1303', transmitter), 'HR', 'PR')]
 
 dnrec <- fread('embargo/derived/de_tag_info_detections.csv')
 dnrec[, group := 'DE']
+dnrec[, tl := totallength]
 
 dets <- rbind(umces, dnrec, fill = T)
 
 dets <- dets[datetime %between% c('2016-01-01', '2020-01-01')]
 
+station_key <- fread('data/station_key.csv')
+dets <- station_key[, .(array, stationname)][dets, on = 'stationname']
+dets <- dets[array != 'FALSE_DET']
+dets <- dets[!is.na(latitude)]
 
 dets[, ':='(hr = floor_date(datetime, 'hour'),
             day = floor_date(datetime, 'day'),
             year = year(datetime),
             yday = yday(datetime))]
-
-station_key <- fread('data/station_key.csv')
-dets <- station_key[, .(array, stationname)][dets, on = 'stationname']
-dets <- dets[array != 'FALSE_DET']
 
 rm(umces, dnrec)
 ```
@@ -175,4 +176,3 @@ Looking at fish that are \>800mm at tagging (migratory if painting with broad st
 -   Aside from 2018, HR residence in coastal MA was pretty consistent.
 -   PR fish left MA waters at nearly the same time each year. Aside from 2017, HR fish departed sometime after.
 -   By 2019, transmitter life and fishing seems to have taken its toll, shrinking down the reported natal river estuary. Despite this, the pattern of residency offshore of MA remained the same. This implies to me that group, rather than individual, tendencies are driving the phenology of MA residence (the loss of transmitters doesn't affect things much), whereas individual effects might be driving natal estuary residency (reduction in number of available transmitters results in a reduction in variance of residency times).
-
