@@ -1,0 +1,213 @@
+---
+title: "Early migration timing models"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+compare arrival and departures more quantitatively (logistic regression?)
+
+Cox proportional hazard sees things as a "ticking clock" after time of exposure. Seems to me that there are external factors going on.
+
+strawman: cox ph should fail as its temperature/etc rather than time of arrival that dictates when they leave?
+
+cox ph ~ origin + year + (1_fish)
+
+binom
+
+pct in ma ~ doy*natal + yr
+
+```{r message=FALSE}
+library(lubridate); library(ggplot2); library(data.table); library(emmeans)
+
+
+umces <- fread('embargo/derived/umces_tag_info_detections.csv')
+# At this point, it seems that all of the MA-tagged fish are Hudson in origin
+umces <- umces[location == 'MA Coast', group := 'HR']
+umces[location != 'MA Coast', group := fifelse(grepl('1303', transmitter), 'HR', 'PR')]
+
+dnrec <- fread('embargo/derived/de_tag_info_detections.csv')
+dnrec[, group := 'DE']
+dnrec[, tl := totallength]
+
+dets <- rbind(umces, dnrec, fill = T)
+
+dets <- dets[datetime %between% c('2016-01-01', '2020-01-01')]
+
+station_key <- fread('data/station_key.csv')
+dets <- station_key[, .(array, stationname)][dets, on = 'stationname']
+dets <- dets[array != 'FALSE_DET']
+dets <- dets[!is.na(latitude)]
+
+dets[, ':='(hr = floor_date(datetime, 'hour'),
+            day = floor_date(datetime, 'day'),
+            year = year(datetime),
+            yday = yday(datetime))]
+
+rm(umces, dnrec)
+```
+
+
+```{r}
+pheno_mig <- dets[tl >= 800,
+                  .(min_date = min(yday),
+                    max_date = max(yday)),
+                  by = c('group', 'array', 'year', 'transmitter')]
+
+pheno_mig <- pheno_mig[, 
+                       .(min_min = min(min_date),
+                         med_min = median(min_date),
+                         med_max = median(max_date),
+                         max_max = max(max_date)),
+                       by = c('group', 'array', 'year')]
+
+pheno_mig <- pheno_mig[group == 'PR' & array == 'Potomac' |
+                         group == 'HR' & array == 'Hudson'|
+                         group =='DE' & array == 'Delaware' |
+                         array == 'MA Coast']
+
+pheno_mig[, array := factor(array,
+                            levels = c('Potomac', 'Delaware', 'Hudson', 'MA Coast'),
+                            ordered = T)]
+
+pheno_mig[, group := factor(group,
+                        levels = c('PR', 'DE', 'HR'),
+                        ordered = T)]
+
+ggplot(data = pheno_mig) +
+  geom_linerange(aes(xmin = min_min, xmax = max_max, y = group, 
+                     color = array),
+                 position = position_dodge(0.75), size = 1) +
+  geom_point(aes(x = med_min, y = group, color = array),
+             position = position_dodge(0.75), size = 5) +
+  geom_point(aes(x = med_max, y = group, color = array), shape = 'triangle',
+             position = position_dodge(0.75), size = 5) +
+  facet_wrap(~ year, ncol = 1) +
+  labs(x = 'Day of year', subtitle = 'Fish >800mm at tagging') +
+  theme_minimal()
+```
+
+
+
+```{r}
+binom_data <- dets[tl >= 800 &
+                     (group == 'PR' & array == 'Potomac' |
+                        group == 'HR' & array == 'Hudson'|
+                        group =='DE' & array == 'Delaware' |
+                        array == 'MA Coast')]
+binom_data <- binom_data[, .SD[which.min(yday)],
+                         by = c('group', 'array', 'year', 'transmitter')]
+trials <- binom_data[, .(trials = .N), by = c('group', 'array', 'year')]
+
+binom_data <- binom_data[, .N, by = c('group', 'array', 'year', 'yday')]
+binom_data[, success := cumsum(N), by = c('group', 'array', 'year')]
+
+binom_data <- binom_data[trials, on = c('group', 'array', 'year')]
+binom_data[, year := as.factor(year)]
+
+full_model <- glm(cbind(success, trials - success) ~
+                  0 + group + yday + group:yday + year,
+                  data = binom_data[array == 'MA Coast'],
+                  family = 'binomial')
+
+mod_arrival <- step(full_model)
+```
+
+```{r}
+summary(mod_arrival)
+
+emtrends(mod_arrival, pairwise ~ group, var = "yday")
+emmip(mod_arrival, group ~ yday, cov.reduce = range, CIs = T)
+```
+
+
+```{r}
+new_data <- expand.grid(group = c('HR', 'PR', 'DE'),
+                        yday = seq(min(binom_data[array == 'MA Coast']$yday),
+                                   max(binom_data[array == 'MA Coast']$yday),
+                                   length.out = 200))
+
+new_data <- setDT(new_data)[group == 'PR' &yday %between% range(binom_data[array == 'MA Coast' & group == 'PR']$yday) |
+                              group == 'HR' & yday %between% range(binom_data[array == 'MA Coast' & group == 'HR']$yday) |
+                              group == 'DE' & yday %between% range(binom_data[array == 'MA Coast' & group == 'DE']$yday) ]
+
+pred <- predict(mod_arrival,
+                newdata = new_data,
+                type = 'link', se.fit = T)
+pred <- data.frame(new_data,
+                   pred = pred)
+
+setDT(pred)[, ':='(pred = mod_arrival$family$linkinv(pred.fit),
+                   lci = mod_arrival$family$linkinv(pred.fit - pred.se.fit),
+                   uci = mod_arrival$family$linkinv(pred.fit + pred.se.fit))]
+
+ggplot(data = pred) +
+  geom_ribbon(aes(x = yday, ymax = uci, ymin = lci, fill = group), alpha = 0.5) +
+  geom_line(aes(x = yday, y = pred, group = group)) +
+  labs(subtitle = 'Modeled arrival in coastal MA')
+```
+
+Entry into MA waters significantly different between DE and HR fish, but not between PR and HR or PR and DE fish.
+
+
+```{r}
+binom_data <- dets[tl >= 800 &
+                     (group == 'PR' & array == 'Potomac' |
+                        group == 'HR' & array == 'Hudson'|
+                        group =='DE' & array == 'Delaware' |
+                        array == 'MA Coast')]
+binom_data <- binom_data[, .SD[which.max(yday)],
+                         by = c('group', 'array', 'year', 'transmitter')]
+trials <- binom_data[, .(trials = .N), by = c('group', 'array', 'year')]
+
+binom_data <- binom_data[, .N, by = c('group', 'array', 'year', 'yday')]
+binom_data[, success := cumsum(N), by = c('group', 'array', 'year')]
+
+binom_data <- binom_data[trials, on = c('group', 'array', 'year')]
+binom_data[, year := as.factor(year)]
+
+full_model <- glm(cbind(success, trials - success) ~
+                   0 + group + yday + group:yday + year,
+                  data = binom_data[array == 'MA Coast'],
+                  family = 'binomial')
+
+mod_departure <- step(full_model)
+```
+
+```{r}
+summary(mod_departure)
+
+emtrends(mod_departure, pairwise ~ group, var = "yday")
+emmip(mod_departure, group ~ yday, cov.reduce = range, CIs = T)
+```
+
+
+exit times not significantly different
+
+```{r}
+new_data <- expand.grid(group = c('HR', 'PR', 'DE'),
+                        yday = seq(min(binom_data[array == 'MA Coast']$yday),
+                                   max(binom_data[array == 'MA Coast']$yday),
+                                   length.out = 200))
+
+new_data <- setDT(new_data)[group == 'PR' &yday %between% range(binom_data[array == 'MA Coast' & group == 'PR']$yday) |
+                              group == 'HR' & yday %between% range(binom_data[array == 'MA Coast' & group == 'HR']$yday) |
+                              group == 'DE' & yday %between% range(binom_data[array == 'MA Coast' & group == 'DE']$yday) ]
+
+pred <- predict(mod_departure,
+                newdata = new_data,
+                type = 'link', se.fit = T)
+pred <- data.frame(new_data,
+                   pred = pred)
+
+setDT(pred)[, ':='(pred = mod_departure$family$linkinv(pred.fit),
+                   lci = mod_departure$family$linkinv(pred.fit - pred.se.fit),
+                   uci = mod_departure$family$linkinv(pred.fit + pred.se.fit))]
+
+ggplot(data = pred) +
+  geom_ribbon(aes(x = yday, ymax = uci, ymin = lci, fill = group), alpha = 0.5) +
+  geom_line(aes(x = yday, y = pred, group = group)) +
+  labs(subtitle = 'Modeled departure in coastal MA')
+```
