@@ -6,9 +6,10 @@ tag_data <- fread('EMBARGO/derived/dnrec_tag_info.csv')
 
 
 # Import detection data ----
-# Detection files have been split into a suite of XLSX files in sex-by-length groups.
+# DE River detection files have been split into a suite of XLSX files in
+#   sex-by-length groups.
 
-# Find the location of all the files
+# Find the location of the inner-DE-River files
 de_dets <- list.files('embargo/raw/dnrec/de detection data',
                       full.names = T)
 
@@ -23,6 +24,45 @@ de_dets <- rbindlist(de_dets)
 
 # Repair names
 setnames(de_dets, function(.) tolower(gsub('and|UTC|[) ()]', '', .)))
+
+
+# Bring in coastal detections
+xl_dets <- list.files('embargo/raw/dnrec/coastal detections',
+                        full.names = T, pattern = 'xlsx')
+csv_dets <- list.files('embargo/raw/dnrec/coastal detections',
+                       full.names = T, pattern = 'csv')
+
+# MATOS detections
+matos_dets <- xl_dets[grepl('proj', xl_dets)]
+matos_dets <- read_excel(matos_dets)
+setDT(matos_dets)
+
+matos_dets <- matos_dets[grepl('[Ss]triped', commonname)]
+matos_dets <- matos_dets[receiver != 'release']
+
+matos_dets <- matos_dets[, .(datecollected, receiver, tagname, sensorvalue,
+                             sensorunit, station, latitude, longitude)]
+setnames(matos_dets, names(de_dets)[c(1:3, 6:10)])
+
+
+# Received Excel detections
+xl_dets <- xl_dets[!grepl('proj', xl_dets)]
+xl_dets <- lapply(xl_dets, read_excel)
+
+xl_dets <- lapply(xl_dets, setDT)
+
+xl_dets <- rbindlist(xl_dets, fill = T)
+xl_dets[, ID := NULL]
+setnames(xl_dets, names(de_dets))
+
+
+# Received CSV detections
+csv_dets <- lapply(csv_dets, fread)
+csv_dets <- rbindlist(csv_dets)
+setnames(csv_dets, names(de_dets))
+
+# Bind all
+de_dets <- rbindlist(list(de_dets, matos_dets, xl_dets, csv_dets), fill = T)
 
 
 # 53482 was re-used on 2017-04-28 (see tag_data), so have to do some gymnastics
@@ -57,6 +97,7 @@ de_dets[stationname == "LL# 3685 Upper DE River CB 9"
 #   Striper should not be in the eastern hemisphere, so make longitudes negative
 de_dets[, longitude := fifelse(longitude > 0, -longitude, longitude)]
 
+de_dets[, latitude := abs(latitude)]
 
 # Some stations have NA lat/longs.
 #   Some of those are defined elsewhere in the data. Fix that here.
