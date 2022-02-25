@@ -52,7 +52,6 @@ xl_dets <- lapply(xl_dets, read_excel)
 xl_dets <- lapply(xl_dets, setDT)
 
 xl_dets <- rbindlist(xl_dets, fill = T)
-xl_dets[, ID := NULL]
 setnames(xl_dets, names(de_dets))
 
 
@@ -164,6 +163,16 @@ station_key <- rbind(
 ## Still missing "LL# 3255 Chester Range LB 6C"     "LL# 3315 Tinicum Island Range 3T"
 # N 39° 50' 59.307"	W 075° 15' 53.463
 # N 39° 51' 00.115"	W 075° 17' 47.283"	tinicum 3t
+
+# Buoy L is missing location data -- found it in the UMCES data.
+station_key <- rbind(
+  station_key,
+  data.table(
+    stationname = 'Buoy L (Sandy Point)',
+    latitude = 39.44099,
+    longitude = -76.05331
+  )
+)
 
 de_dets <- station_key[de_dets, on = 'stationname']
 de_dets[, ':='(latitude = fifelse(is.na(latitude), i.latitude, latitude),
