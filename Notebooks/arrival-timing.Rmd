@@ -15,7 +15,7 @@ strawman: cox ph should fail as its temperature/etc rather than time of arrival 
 
 cox ph ~ origin + year + (1_fish)
 
-binom
+
 
 pct in ma ~ doy*natal + yr
 
