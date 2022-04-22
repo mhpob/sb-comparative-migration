@@ -1,23 +1,13 @@
 ---
-title: "Early migration timing models"
-output: html_document
+title: "Early migration phenology models"
+output: html_notebook
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
-compare arrival and departures more quantitatively (logistic regression?)
-
-Cox proportional hazard sees things as a "ticking clock" after time of exposure. Seems to me that there are external factors going on.
-
-strawman: cox ph should fail as its temperature/etc rather than time of arrival that dictates when they leave?
-
-cox ph ~ origin + year + (1_fish)
-
-binom
-
-pct in ma ~ doy*natal + yr
+As a reminder, the figure below displays a mile-high view of migration timing across different striped bass spawning groups: Hudson River (HR), Delaware River (DE), and Potomac River (PR). The length of the line displays the range of residence of each group in either the natal estuary (colors) or coastal Massachusetts (yellow). The circle shows the median day of arrival in the given array, and the triangle shows the median date of departure. Only fish that were larger than 800 mm at the time of tagging are shown.
 
 ```{r message=FALSE}
 library(lubridate); library(ggplot2); library(data.table); library(emmeans)
@@ -89,7 +79,11 @@ ggplot(data = pheno_mig) +
   theme_minimal()
 ```
 
+I'm going to make a quick-and-dirty model to compare the timing of entry into coastal Massachusetts by spawning group. The full model includes day of year ("yday", numeric), spawning group ("group", factor), the year ("year", ordered factor), and all interactions.
 
+The response was modeled as binomial, with the cumulative number of fish that have entered Massachusetts waters per group-year combination considered "successes" and the total number of fish that arrived in coastal MA per group-year combination as the number of trials.
+
+Using step-wise variable selection...
 
 ```{r}
 binom_data <- dets[tl >= 800 &
@@ -102,36 +96,55 @@ binom_data <- binom_data[, .SD[which.min(yday)],
 trials <- binom_data[, .(trials = .N), by = c('group', 'array', 'year')]
 
 binom_data <- binom_data[, .N, by = c('group', 'array', 'year', 'yday')]
+setorder(binom_data, group, array, year, yday)
 binom_data[, success := cumsum(N), by = c('group', 'array', 'year')]
 
 binom_data <- binom_data[trials, on = c('group', 'array', 'year')]
-binom_data[, year := as.factor(year)]
+binom_data[, year := factor(year,
+                            levels = seq(2016, 2019, 1),
+                            ordered = T)]
 
 full_model <- glm(cbind(success, trials - success) ~
-                  0 + group + yday + group:yday + year,
+                  0 + group + yday + year + group:yday + group:year + year:yday +
+                    group:year:yday,
                   data = binom_data[array == 'MA Coast'],
                   family = 'binomial')
 
 mod_arrival <- step(full_model)
 ```
 
+...the variables selected are: `r paste(colnames(attr(terms(mod_arrival), 'factors')), collapse = ", ")`.
+
 ```{r}
 summary(mod_arrival)
+```
 
-emtrends(mod_arrival, pairwise ~ group, var = "yday")
-emmip(mod_arrival, group ~ yday, cov.reduce = range, CIs = T)
+When looking at pairwise contrasts by year, the only significant differences occur in 2018, where arrival in MA was more rapid in DE and PR fish when compared to HR fish (greater yday slope).
+
+```{r}
+emtrends(mod_arrival, pairwise ~ group | year, var = "yday")$contrasts
+
+emmeans(mod_arrival, pairwise ~ group | year, cov.keep = 'yday')
+
+emmip(mod_arrival, group ~ yday | year, cov.keep = 'yday', CIs = T)
 ```
 
 
 ```{r}
+range_key <-  binom_data[array == 'MA Coast',
+                         .(min = min(yday), max = max(yday)),
+                         by = c('group', 'year')]
+setkey(range_key, group, year, min, max)
 new_data <- expand.grid(group = c('HR', 'PR', 'DE'),
                         yday = seq(min(binom_data[array == 'MA Coast']$yday),
                                    max(binom_data[array == 'MA Coast']$yday),
-                                   length.out = 200))
+                                   length.out = 200),
+                        year = c('2016', '2017', '2018', '2019'))
+setDT(new_data)
+new_data[, yday2 := yday]
+setkey(new_data,  group, year, yday, yday2)
 
-new_data <- setDT(new_data)[group == 'PR' &yday %between% range(binom_data[array == 'MA Coast' & group == 'PR']$yday) |
-                              group == 'HR' & yday %between% range(binom_data[array == 'MA Coast' & group == 'HR']$yday) |
-                              group == 'DE' & yday %between% range(binom_data[array == 'MA Coast' & group == 'DE']$yday) ]
+new_data <- foverlaps(range_key, new_data)
 
 pred <- predict(mod_arrival,
                 newdata = new_data,
@@ -142,11 +155,13 @@ pred <- data.frame(new_data,
 setDT(pred)[, ':='(pred = mod_arrival$family$linkinv(pred.fit),
                    lci = mod_arrival$family$linkinv(pred.fit - pred.se.fit),
                    uci = mod_arrival$family$linkinv(pred.fit + pred.se.fit))]
-
+plotly::ggplotly(
 ggplot(data = pred) +
   geom_ribbon(aes(x = yday, ymax = uci, ymin = lci, fill = group), alpha = 0.5) +
   geom_line(aes(x = yday, y = pred, group = group)) +
+  facet_wrap(~year) +
   labs(subtitle = 'Modeled arrival in coastal MA')
+)
 ```
 
 Entry into MA waters significantly different between DE and HR fish, but not between PR and HR or PR and DE fish.
@@ -163,6 +178,7 @@ binom_data <- binom_data[, .SD[which.max(yday)],
 trials <- binom_data[, .(trials = .N), by = c('group', 'array', 'year')]
 
 binom_data <- binom_data[, .N, by = c('group', 'array', 'year', 'yday')]
+setorder(binom_data, group, array, year, yday)
 binom_data[, success := cumsum(N), by = c('group', 'array', 'year')]
 
 binom_data <- binom_data[trials, on = c('group', 'array', 'year')]
@@ -187,14 +203,20 @@ emmip(mod_departure, group ~ yday, cov.reduce = range, CIs = T)
 exit times not significantly different
 
 ```{r}
+range_key <-  binom_data[array == 'MA Coast',
+                         .(min = min(yday), max = max(yday)),
+                         by = c('group', 'year')]
+setkey(range_key, group, min, max)
 new_data <- expand.grid(group = c('HR', 'PR', 'DE'),
                         yday = seq(min(binom_data[array == 'MA Coast']$yday),
                                    max(binom_data[array == 'MA Coast']$yday),
-                                   length.out = 200))
+                                   length.out = 200),
+                        year = c('2016', '2017', '2018', '2019'))
+setDT(new_data)
+new_data[, yday2 := yday]
+setkey(new_data,  group, yday, yday2)
 
-new_data <- setDT(new_data)[group == 'PR' &yday %between% range(binom_data[array == 'MA Coast' & group == 'PR']$yday) |
-                              group == 'HR' & yday %between% range(binom_data[array == 'MA Coast' & group == 'HR']$yday) |
-                              group == 'DE' & yday %between% range(binom_data[array == 'MA Coast' & group == 'DE']$yday) ]
+new_data <- foverlaps(range_key, new_data)
 
 pred <- predict(mod_departure,
                 newdata = new_data,
@@ -209,5 +231,6 @@ setDT(pred)[, ':='(pred = mod_departure$family$linkinv(pred.fit),
 ggplot(data = pred) +
   geom_ribbon(aes(x = yday, ymax = uci, ymin = lci, fill = group), alpha = 0.5) +
   geom_line(aes(x = yday, y = pred, group = group)) +
+  facet_wrap(~year) +
   labs(subtitle = 'Modeled departure in coastal MA')
 ```
