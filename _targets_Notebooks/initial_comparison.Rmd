@@ -1,0 +1,141 @@
+---
+title: "Initial cross-system data comparison"
+date: '2022-04-22'
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+## General summary
+
+- 849 fish were tagged across the four groups (coastal Massachusetts and the Hudson, Delaware, and Potomac Rivers) from 2014-2019
+- 2016 was the only year where fish were concurrently tagged by each group
+- Types of data collected were tag date, transmitter ID, external ID, in-house ID, total length, fork length, wet weight, scale age, sex, general area of tagging
+- All tagging groups collected the date of tagging, age, and total length
+  - Hudson fish are in the process of being aged
+  - 15% Potomac fish have scales collected for ageing, but these have not yet been processed
+- Hudson, Delaware, and Potomac River systems have sex data; coastal Massachusetts does not
+- Hudson and Potomac have weights; Delaware and Massachusetts do not
+
+
+```{r message=FALSE}
+library(ggplot2); library(data.table)
+```
+```{r}
+all_info <- tar_read(combined_tags)
+all_info[, yr := as.factor(year(tagdate))]
+all_info[, system := as.factor(system)]
+
+all_info
+```
+
+## Systems
+
+```{r}
+addmargins(xtabs(~  system, addNA = T, data = all_info))
+```
+
+## Year tagged
+
+- Potomac tags skew older, Delaware tags skew younger, Massachusetts tags are in the middle, and Hudson were only tagged in 2016
+
+- 2016 is the only year that had fish tagged in all systems
+
+```{r}
+addmargins(xtabs(~ yr + system, addNA = T, data = all_info))
+```
+
+```{r}
+ggplot(data = all_info) +
+  geom_bar(aes(x = yr, fill = system))
+```
+
+## Age
+
+- A subset of Potomac-tagged fish have not yet been, but are planning to be, aged. There will likely wind up being 1 Hudson River *NA* and 1 Potomac River *NA*.
+
+```{r}
+# Cross-tabulation
+addmargins(xtabs(~ age + system, addNA = T, data = all_info))
+
+# Range of ages
+all_info[, .(min = min(age, na.rm = T),
+             median = median(age, na.rm = T),
+             max = max(age, na.rm = T)), 
+         by = system]
+```
+
+- Delaware fish are oldest, followed by Hudson, then Potomac, then Massachusetts.
+
+```{r}
+TukeyHSD(aov(age ~ system, data = all_info))
+```
+
+
+```{r}
+ggplot(data = all_info[!is.na(age)]) +
+  geom_bar(aes(x = age, fill = yr)) +
+  scale_fill_viridis_d() +
+  facet_wrap(~ system) +
+  labs(title = 'Age by year and system tagged')
+```
+
+
+```{r}
+ggplot(data = all_info[!is.na(age)]) +
+  geom_bar(aes(x = age, fill = sex)) +
+  facet_wrap(~ system) +
+  labs(title = 'Age by system tagged and sex')
+```
+
+
+## Sexes
+
+Fish collected off the Massachusetts coast and 21% of Potomac fish were not sexed. "*NA*" means that sex was not recorded, while "*U*" means that the sex was not able to be determined.
+
+```{r}
+addmargins(xtabs(~ sex + system, addNA = T, data = all_info))
+```
+
+```{r}
+ggplot(data = all_info) +
+  geom_bar(aes(x = yr, fill = sex)) +
+  facet_wrap(~ system)
+```
+
+## Lengths
+
+All fish collected have total lengths, while only Hudson fish have fork lengths. Seems TL is the way to go here.
+
+```{r}
+ggplot(data = all_info) +
+  geom_histogram(aes(x = tl, fill = yr), binwidth = 50) +
+  scale_fill_viridis_d() +
+  facet_wrap(~ system) +
+  labs(title = 'Total length by year and tagged')
+```
+
+- Potomac and MA coast fish skew smaller, Hudson skews larger, and DE is bimodal (related in part to sex, see below)
+
+```{r}
+ggplot(data = all_info[!is.na(sex) & sex != 'U']) +
+  geom_histogram(aes(x = tl, fill = yr), binwidth = 50) +
+  scale_fill_viridis_d() +
+  facet_grid(sex ~ system) +
+  labs(title = 'Total length by sex and year and system tagged')
+```
+
+
+## Weights
+
+Only Potomac and Hudson fish have recorded weights, with Potomac fish skewing much lighter.
+
+```{r}
+all_info[!is.na(wgt), .N, by = system]
+
+ggplot(data = all_info[!is.na(wgt)]) +
+  geom_histogram(aes(x = wgt, fill = yr), binwidth = 1000) +
+  scale_fill_viridis_d() +
+  facet_wrap(~ system)
+```
+

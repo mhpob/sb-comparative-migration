@@ -1,0 +1,54 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(targets); library(data.table); library(mgcv)
+dets <- tar_read(combined_dets)
+dets <- dets[latitude > 20]
+dets <- dets[tl > 800]
+dets[, wk := week(datetime)]
+dets[, wk.tag := week(tagdate)]
+
+dets <- dets[wk != wk.tag]
+
+dets[, group := factor(group)]
+
+# TRY BINNING LATITUDES
+dets <- dets[, .(m_lat = median(latitude)), by = c('wk', 'year', 'group', 'transmitter')]
+
+dets <- dets[, .N, by = c('wk', 'year', 'group', 'm_lat')]
+
+# dets <- dets[, .N,  by = c('day', 'group', 'm_lat')]
+```
+
+```{r}
+k <- gam(N ~
+           te(wk, m_lat, bs = c('cc','tp'), m = 2) +
+           te(wk, m_lat, by = group, bs = c('cc', 'tp'), m = 1),
+         knots = list(wk = c(1, 53)), method = 'REML',
+         data = dets, family = poisson())
+
+summary(k)
+```
+
+
+```{r}
+new_data <- expand.grid(group = c('HR', 'DE', 'PR'),
+                        m_lat = seq(36, 43, length.out = 100),
+                        wk = 1:53)
+
+new_data$pred <- predict(k, new_data, type = 'response')
+
+
+ggplot(data = new_data) +
+  geom_tile(aes(x = wk, y = m_lat, fill = pred)) +
+  scale_fill_viridis_c() +
+  facet_wrap(~ group) #+
+  # geom_point(data = dets, aes(x = wk, y = m_lat), alpha = 0.1)
+```
+
+
+
+

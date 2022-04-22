@@ -1,0 +1,94 @@
+---
+title: "VA arrival timing"
+author: "Mike O'Brien"
+date: "4/21/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(targets); library(lubridate); library(ggplot2); library(data.table); library(emmeans)
+
+
+dets <- tar_read(combined_dets)
+dets <- dets[latitude > 20]
+
+
+```
+```{r}
+pheno_mig <- dets[tl >= 800,
+                  .(min_date = min(yday),
+                    max_date = max(yday)),
+                  by = c('group', 'array', 'year', 'transmitter')]
+
+pheno_mig <- pheno_mig[, 
+                       .(min_min = min(min_date),
+                         med_min = median(min_date),
+                         med_max = median(max_date),
+                         max_max = max(max_date)),
+                       by = c('group', 'array', 'year')]
+
+pheno_mig <- pheno_mig[array == 'MA Coast' |array == 'VA Coast' | array == 'MD Coast']
+
+pheno_mig[, array := factor(array,
+                            levels = c('VA Coast', 'MD Coast', 'MA Coast'),
+                            ordered = T)]
+
+pheno_mig[, group := factor(group,
+                        levels = c('PR', 'DE', 'HR'),
+                        ordered = T)]
+
+ggplot(data = pheno_mig) +
+  geom_linerange(aes(xmin = min_min, xmax = max_max, y = group, 
+                     color = array),
+                 position = position_dodge(0.75), size = 1) +
+  geom_point(aes(x = med_min, y = group, color = array),
+             position = position_dodge(0.75), size = 5) +
+  geom_point(aes(x = med_max, y = group, color = array), shape = 'triangle',
+             position = position_dodge(0.75), size = 5) +
+  facet_wrap(~ year, ncol = 1) +
+  labs(x = 'Day of year', subtitle = 'Fish >800mm at tagging') +
+  theme_minimal()
+```
+
+
+
+
+```{r}
+binom_data <- dets[tl >= 800 &
+                     (array == 'MA Coast' | array == 'MD Coast') &
+                     yday >=188]
+binom_data <- binom_data[, .SD[which.min(yday)],
+                         by = c('group', 'array', 'year', 'transmitter')]
+trials <- binom_data[, .(trials = .N), by = c('group', 'array', 'year')]
+
+binom_data <- binom_data[, .N, by = c('group', 'array', 'year', 'yday')]
+setorder(binom_data, group, array, year, yday)
+binom_data[, success := cumsum(N), by = c('group', 'array', 'year')]
+
+binom_data <- binom_data[trials, on = c('group', 'array', 'year')]
+binom_data[, year := factor(year,
+                            levels = seq(2016, 2019, 1),
+                            ordered = T)]
+
+full_model <- glm(cbind(success, trials - success) ~
+                  0 + group + yday + year + group:yday + group:year + year:yday +
+                    group:year:yday,
+                  data = binom_data[array == 'MD Coast'],
+                  family = 'binomial')
+
+mod_arrival <- step(full_model)
+```
+
+
+```{r}
+emtrends(mod_arrival, pairwise ~ group | year, var = "yday")$contrasts
+
+emmeans(mod_arrival, pairwise ~ group | year, cov.keep = 'yday')
+
+emmip(mod_arrival, group ~ yday | year, cov.keep = 'yday', CIs = T)
+```
+
